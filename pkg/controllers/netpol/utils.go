@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	api "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
+	utilsnet "k8s.io/utils/net"
 )
 
 const (
@@ -60,4 +62,45 @@ func validateNodePortRange(nodePortOption string) (string, error) {
 		return "", fmt.Errorf("port 1 is greater than or equal to port 2 in range given: '%s'", nodePortOption)
 	}
 	return fmt.Sprintf("%d:%d", port1, port2), nil
+}
+
+func getIPsFromPods(pods []podInfo, family api.IPFamily) []string {
+	var ips []string
+	for _, pod := range pods {
+		switch family {
+		case api.IPv4Protocol:
+			ip, err := getPodIPv4Address(pod)
+			if err != nil {
+				klog.Warningf("Could not get IPv4 addresses of all pods: %v", err)
+				continue
+			}
+			ips = append(ips, ip)
+		case api.IPv6Protocol:
+			ip, err := getPodIPv6Address(pod)
+			if err != nil {
+				klog.Warningf("Could not get IPv6 addresses of all pods: %v", err)
+				continue
+			}
+			ips = append(ips, ip)
+		}
+	}
+	return ips
+}
+
+func getPodIPv6Address(pod podInfo) (string, error) {
+	for _, ip := range pod.ips {
+		if utilsnet.IsIPv6String(ip.IP) {
+			return ip.IP, nil
+		}
+	}
+	return "", fmt.Errorf("pod %s has no IPv6Address", pod.name)
+}
+
+func getPodIPv4Address(pod podInfo) (string, error) {
+	for _, ip := range pod.ips {
+		if utilsnet.IsIPv4String(ip.IP) {
+			return ip.IP, nil
+		}
+	}
+	return "", fmt.Errorf("pod %s has no IPv4Address", pod.name)
 }
