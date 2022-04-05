@@ -14,7 +14,7 @@ require (
 	github.com/moby/ipvs v1.0.1
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.17.0
+	github.com/onsi/gomega v1.19.0
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/osrg/gobgp v0.0.0-20211001064702-91b91278600d
 	github.com/prometheus/client_golang v1.11.0
@@ -22,7 +22,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
-	golang.org/x/net v0.0.0-20211020060615-d418f374d309
+	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
 	google.golang.org/grpc v1.42.0
 	k8s.io/api v0.22.4
 	k8s.io/apimachinery v0.22.4
