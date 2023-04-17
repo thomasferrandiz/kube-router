@@ -519,11 +519,11 @@ func (npc *NetworkPolicyController) ensureExplicitAccept() {
 							newRulePos = pos
 						}
 					}
-					utils.Insert(filterTableRules, mainChain, newRulePos + 1, args)
+					utils.Insert(filterTableRules, mainChain, newRulePos+1, args)
 				}
-                        }
-                }
-        }
+			}
+		}
+	}
 }
 
 // Creates custom chains KUBE-NWPLCY-DEFAULT
@@ -752,6 +752,8 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	ipSetHandlers map[v1core.IPFamily]utils.IPSetHandler) (*NetworkPolicyController, error) {
 	npc := NetworkPolicyController{ipsetMutex: ipsetMutex}
 
+	klog.Info("creating new network policy controller")
+	klog.V(3).Info("log level 3 is visible")
 	// Creating a single-item buffered channel to ensure that we only keep a single full sync request at a time,
 	// additional requests would be pointless to queue since after the first one was processed the system would already
 	// be up to date with all of the policy changes from any enqueued request after that
