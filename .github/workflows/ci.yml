@@ -2,12 +2,6 @@ name: continuous-integration
 
 on:
   push:
-    branches:
-    - master
-    - v[1-9].*
-    - prep-v[1-9].*
-    tags:
-    - v[1-9].*
   pull_request:
     branches:
     - master
