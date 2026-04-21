@@ -3,11 +3,13 @@ name: ci-e2e-netpol
 on:
   push:
     branches:
+    - netpol-nftables
     - master
     - v[1-9].*
     - prep-v[1-9].*
   pull_request:
     branches:
+    - netpol-nftables
     - master
     - v[1-9].*
     - prep-v[1-9].*
