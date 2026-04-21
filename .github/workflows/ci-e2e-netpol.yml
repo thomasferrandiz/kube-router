@@ -1,0 +1,90 @@
+name: ci-e2e-netpol
+
+on:
+  push:
+    branches:
+    - master
+    - v[1-9].*
+    - prep-v[1-9].*
+  pull_request:
+    branches:
+    - master
+    - v[1-9].*
+    - prep-v[1-9].*
+
+permissions:
+  contents: read
+
+env:
+  # Keep these in sync with ci.yml; update-deps will pin the SHAs.
+  BUILDTIME_BASE: "golang:1.25.7-alpine3.23@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced"
+  RUNTIME_BASE: "alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659"
+  GO_VERSION: "~1.25.7"
+  KUBE_ROUTER_IMAGE: "kube-router:e2e-test"
+  KIND_VERSION: "v0.27.0"
+  KIND_NODE_IMAGE: "kindest/node:v1.32.2"
+
+jobs:
+  e2e-netpol:
+    name: e2e-netpol (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [iptables, nftables]
+    steps:
+    - name: Check out code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Set up Go
+      uses: ./.github/actions/setup-go
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+    # Build the kube-router image from source and load it into the local Docker daemon.
+    # The Dockerfile handles compilation in a builder stage, so no pre-built binary is needed.
+    - name: Build kube-router container image
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+      with:
+        context: .
+        load: true
+        build-args: |
+          BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
+          RUNTIME_BASE=${{ env.RUNTIME_BASE }}
+        tags: ${{ env.KUBE_ROUTER_IMAGE }}
+
+    - name: Install kind
+      run: |
+        curl -sSLo ./kind \
+          "https://kind.sigs.k8s.io/dl/${{ env.KIND_VERSION }}/kind-linux-amd64"
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+
+    - name: Create kind cluster
+      run: kind create cluster --image "${{ env.KIND_NODE_IMAGE }}" --wait 60s
+
+    - name: Load kube-router image into kind
+      run: kind load docker-image "${{ env.KUBE_ROUTER_IMAGE }}"
+
+    # Deploy kube-router in firewall-only mode. Pod networking and service proxying are
+    # handled by the default kind components (kindnet and kube-proxy).
+    - name: Deploy kube-router (firewall-only mode)
+      run: kubectl apply -f test/e2e/netpol/kube-router-daemonset.yaml
+
+    # Patch in the nftables flag for the nftables matrix run only.
+    - name: Enable nftables backend
+      if: matrix.backend == 'nftables'
+      run: |
+        kubectl patch daemonset kube-router -n kube-system --type json \
+          -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--use-nftables-for-netpol"}]'
+
+    - name: Wait for kube-router to be ready
+      run: kubectl rollout status daemonset/kube-router -n kube-system --timeout=120s
+
+    - name: Run NetworkPolicy e2e tests
+      run: go test -v ./test/e2e/netpol/... -timeout 600s
+      env:
+        E2E: "1"
