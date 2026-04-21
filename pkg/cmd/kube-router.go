@@ -198,8 +198,9 @@ func (kr *KubeRouter) Run() error {
 		EnableIPv6:        kr.Config.EnableIPv6,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create IP validator: %v", err)
+		return fmt.Errorf("failed to create service IP validator: %v", err)
 	}
+	ipValidator.LogStatus()
 
 	if kr.Config.RunRouter {
 		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config,
