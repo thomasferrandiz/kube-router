@@ -113,17 +113,19 @@ jobs:
     - name: Load kube-router image into kind
       run: kind load docker-image "${{ env.KUBE_ROUTER_IMAGE }}" --name e2e
 
-    # Deploy kube-router in firewall-only mode. Pod networking and service proxying are
-    # handled by the default kind components (kindnet and kube-proxy).
-    - name: Deploy kube-router (firewall-only mode)
-      run: kubectl apply -f test/e2e/netpol/kube-router-daemonset.yaml
-
-    # Patch in the nftables flag for the nftables matrix run only.
-    - name: Enable nftables backend
-      if: matrix.backend == 'nftables'
+    - name: Deploy kube-router (${{ matrix.netpol-backend }} NetworkPolicy backend)
       run: |
-        kubectl patch daemonset kube-router -n kube-system --type json \
-          -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--use-nftables-for-netpol"}]'
+        MANIFEST=$(cat daemonset/generic-kuberouter.yaml \
+          | sed 's|[^ ]*cloudnativelabs/kube-router[^ ]*|kube-router:e2e-test|g' \
+          | sed 's|imagePullPolicy: Always|imagePullPolicy: Never|g')
+        if [[ "${{ matrix.netpol-backend }}" == "nftables" ]]; then
+          MANIFEST=$(echo "$MANIFEST" \
+            | yq '(select(.kind == "DaemonSet") | .spec.template.spec.containers[0].args) += ["--use-nftables-for-netpol=true"]')
+        fi
+        # debug: output the final manifest to be applied
+        echo "=== Final kube-router DaemonSet manifest ==="
+        echo "$MANIFEST"
+        echo "$MANIFEST" | kubectl apply -f -
 
     - name: Wait for kube-router to be ready
       run: kubectl rollout status daemonset/kube-router -n kube-system --timeout=120s
