@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	v1 "k8s.io/api/core/v1"
 	v1core "k8s.io/api/core/v1"
@@ -85,9 +86,16 @@ func newIntegrationNPC(
 		NodeName:      "node",
 		NodeIPv4Addrs: map[v1.NodeAddressType][]net.IP{v1.NodeInternalIP: {net.IPv4(10, 10, 10, 10)}},
 	}
-	npc.serviceClusterIPRanges = []net.IPNet{{IP: net.IPv4(10, 43, 0, 0), Mask: net.CIDRMask(16, 32)}}
+	ipRanges, err := svcip.NewValidator(svcip.Config{
+		ClusterIPCIDRs:  []string{"10.43.0.0/16"},
+		ExternalIPCIDRs: []string{"10.44.0.0/16"},
+		EnableIPv4:      true,
+	})
+	if err != nil {
+		panic("failed to create svcip validator for test: " + err.Error())
+	}
+	npc.ipRanges = ipRanges
 	npc.serviceNodePortRange = "30000-32767"
-	npc.serviceExternalIPRanges = []net.IPNet{{IP: net.IPv4(10, 44, 0, 0), Mask: net.CIDRMask(16, 32)}}
 	npc.podLister = podInformer.GetIndexer()
 	npc.nsLister = nsInformer.GetIndexer()
 	npc.npLister = npInformer.GetIndexer()
@@ -364,9 +372,16 @@ func TestIntegrationDualStackTables(t *testing.T) {
 		NodeName:      "node",
 		NodeIPv4Addrs: map[v1.NodeAddressType][]net.IP{v1.NodeInternalIP: {net.IPv4(10, 10, 10, 10)}},
 	}
-	npc.serviceClusterIPRanges = []net.IPNet{{IP: net.IPv4(10, 43, 0, 0), Mask: net.CIDRMask(16, 32)}}
+	ipRanges2, err := svcip.NewValidator(svcip.Config{
+		ClusterIPCIDRs:  []string{"10.43.0.0/16"},
+		ExternalIPCIDRs: []string{"10.44.0.0/16"},
+		EnableIPv4:      true,
+	})
+	if err != nil {
+		panic("failed to create svcip validator for test: " + err.Error())
+	}
+	npc.ipRanges = ipRanges2
 	npc.serviceNodePortRange = "30000-32767"
-	npc.serviceExternalIPRanges = []net.IPNet{{IP: net.IPv4(10, 44, 0, 0), Mask: net.CIDRMask(16, 32)}}
 	npc.podLister = podInformer.GetIndexer()
 	npc.nsLister = nsInformer.GetIndexer()
 	npc.npLister = netpolInformer.GetIndexer()

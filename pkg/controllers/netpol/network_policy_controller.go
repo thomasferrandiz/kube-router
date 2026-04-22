@@ -2,7 +2,6 @@ package netpol
 
 import (
 	"bytes"
-	"net"
 	"sync"
 	"time"
 
@@ -76,12 +75,10 @@ type NetworkPolicyController interface {
 
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyControllerBase struct {
-	krNode                      utils.NodeIPAndFamilyAware
-	serviceClusterIPRanges      []net.IPNet
-	serviceExternalIPRanges     []net.IPNet
-	serviceLoadBalancerIPRanges []net.IPNet
-	serviceNodePortRange        string
-	filterTableRules            map[v1core.IPFamily]*bytes.Buffer
+	krNode               utils.NodeIPAndFamilyAware
+	ipRanges             svcip.RangeQuerier
+	serviceNodePortRange string
+	filterTableRules     map[v1core.IPFamily]*bytes.Buffer
 
 	mu                  sync.Mutex
 	syncPeriod          time.Duration
@@ -200,16 +197,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	// be up to date with all of the policy changes from any enqueued request after that
 	npcBase.fullSyncRequestChan = make(chan struct{}, 1)
 
-	// Populate IP ranges from the pre-parsed and validated svcip.RangeQuerier
-	npcBase.serviceClusterIPRanges = append(
-		ipRanges.ClusterIPRanges(v1core.IPv4Protocol),
-		ipRanges.ClusterIPRanges(v1core.IPv6Protocol)...)
-	npcBase.serviceExternalIPRanges = append(
-		ipRanges.ExternalIPRanges(v1core.IPv4Protocol),
-		ipRanges.ExternalIPRanges(v1core.IPv6Protocol)...)
-	npcBase.serviceLoadBalancerIPRanges = append(
-		ipRanges.LoadBalancerIPRanges(v1core.IPv4Protocol),
-		ipRanges.LoadBalancerIPRanges(v1core.IPv6Protocol)...)
+	npcBase.ipRanges = ipRanges
 
 	// Validate and parse NodePort range
 	var err error
