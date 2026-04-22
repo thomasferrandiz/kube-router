@@ -18,6 +18,10 @@ unparseable = "unparseable"
 # Variable abbreviation for serviceInternalTrafficPolicy
 serIntTrafPol = "serIntTrafPol"
 
+[default.extend-words]
+# nd-neighbor-solicit and nd-neighbor-advert are real nftables ICMPv6 type names
+nd = "nd"
+
 [type.testdata]
 extend-glob = ["testdata/**", "*_test.go"]
 

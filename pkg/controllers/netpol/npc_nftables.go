@@ -372,7 +372,7 @@ func (npc *NetworkPolicyControllerNftables) ensureCommonPolicyChain() {
 		tx.Flush(&knftables.Chain{
 			Name: kubeCommonNetpolChain,
 		})
-		// ensure statefull firewall drops INVALID state traffic from/to the pod
+		// ensure stateful firewall drops INVALID state traffic from/to the pod
 		// For full context see: https://bugzilla.netfilter.org/show_bug.cgi?id=693
 		// The NAT engine ignores any packet with state INVALID, because there's no reliable way to determine what kind of
 		// NAT should be performed. So the proper way to prevent the leakage is to drop INVALID packets.
@@ -385,7 +385,7 @@ func (npc *NetworkPolicyControllerNftables) ensureCommonPolicyChain() {
 			),
 			Comment: knftables.PtrTo("drop invalid state for pod"),
 		})
-		// ensure statefull firewall that permits RELATED,ESTABLISHED traffic from/to the pod
+		// ensure stateful firewall that permits RELATED,ESTABLISHED traffic from/to the pod
 		tx.Add(&knftables.Rule{
 			Chain: kubeCommonNetpolChain,
 			Rule: knftables.Concat(
