@@ -111,7 +111,7 @@ jobs:
 
 
     - name: Load kube-router image into kind
-      run: kind load docker-image "${{ env.KUBE_ROUTER_IMAGE }}"
+      run: kind load docker-image "${{ env.KUBE_ROUTER_IMAGE }}" --name e2e
 
     # Deploy kube-router in firewall-only mode. Pod networking and service proxying are
     # handled by the default kind components (kindnet and kube-proxy).
