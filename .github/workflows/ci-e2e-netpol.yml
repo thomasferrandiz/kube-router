@@ -27,6 +27,34 @@ env:
   KIND_NODE_IMAGE: "kindest/node:v1.32.2"
 
 jobs:
+  # Executes Integration Tests (require nft binary + kernel nftables support) 
+  ci-integration-tests:
+    name: ci-integration-tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v6
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+      id: go
+
+    - name: Download Go modules
+      run: go mod download
+
+    - name: Install nftables
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y nftables
+
+    - name: Run integration tests for kube-router netpol
+      run: |
+        sudo --preserve-env=PATH,HOME,GOPATH,GOROOT \
+          go test -tags integration -v -timeout 60s -run TestIntegration \
+          github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol/...
+
   e2e-netpol:
     name: e2e-netpol (${{ matrix.backend }})
     runs-on: ubuntu-latest
@@ -86,7 +114,58 @@ jobs:
     - name: Wait for kube-router to be ready
       run: kubectl rollout status daemonset/kube-router -n kube-system --timeout=120s
 
+    - name: Dump initial cluster state
+      run: |
+        echo "=== Nodes ==="
+        kubectl get nodes -o wide
+        echo ""
+        echo "=== Pods (all namespaces) ==="
+        kubectl get pods -A -o wide
+        echo ""
+        echo "=== kube-router DaemonSet ==="
+        kubectl -n kube-system describe daemonset/kube-router
+        echo ""
+        echo "=== kube-router initial logs ==="
+        kubectl -n kube-system logs -l k8s-app=kube-router --tail=100
+
+
     - name: Run NetworkPolicy e2e tests
       run: go test -v ./test/e2e/netpol/... -timeout 600s
       env:
         E2E: "1"
+
+
+    - name: Collect debug info on failure
+      if: failure()
+      run: |
+        echo "=== Nodes ==="
+        kubectl get nodes -o wide || true
+        echo ""
+        echo "=== Node descriptions ==="
+        kubectl describe nodes || true
+        echo ""
+        echo "=== All pods ==="
+        kubectl get pods -A -o wide || true
+        echo ""
+        echo "=== Events (all namespaces, sorted by time) ==="
+        kubectl get events -A --sort-by='.lastTimestamp' || true
+        echo ""
+        echo "=== kube-router DaemonSet description ==="
+        kubectl -n kube-system describe daemonset/kube-router || true
+        echo ""
+        echo "=== kube-router pod descriptions ==="
+        kubectl -n kube-system describe pods -l k8s-app=kube-router || true
+        echo ""
+        echo "=== kube-router full logs ==="
+        kubectl -n kube-system logs -l k8s-app=kube-router --tail=500 || true
+        echo ""
+        echo "=== nftables ruleset (per kube-router pod) ==="
+        for pod in $(kubectl -n kube-system get pods -l k8s-app=kube-router -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+          echo "--- $pod ---"
+          kubectl -n kube-system exec "$pod" -- nft list ruleset 2>&1 || true
+          echo ""
+        done
+
+    - name: Delete Kind cluster
+      if: always()
+      run: kind delete cluster --name e2e
