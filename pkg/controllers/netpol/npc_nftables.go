@@ -41,7 +41,8 @@ type NetworkPolicyControllerNftables struct {
 	ctx            context.Context
 }
 
-func NewKnftablesInterfaces(ctx context.Context, config *options.KubeRouterConfig) (map[v1core.IPFamily]knftables.Interface, error) {
+func NewKnftablesInterfaces(
+	ctx context.Context, config *options.KubeRouterConfig) (map[v1core.IPFamily]knftables.Interface, error) {
 	if config == nil || !config.UseNftablesForNetpol {
 		return nil, nil
 	}
@@ -81,8 +82,8 @@ func initTable(ctx context.Context, ipFamily knftables.Family, name string) (knf
 }
 
 // Run runs forever till we receive notification on stopCh
-func (npc *NetworkPolicyControllerNftables) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
-	wg *sync.WaitGroup) {
+func (npc *NetworkPolicyControllerNftables) Run(
+	healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(npc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
@@ -222,7 +223,8 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() {
 		}
 	}
 
-	// traffic towards service CIDRs should be allowed to ingress regardless of any network policy, so add rules for that in the top level chains
+	// traffic towards service CIDRs should be allowed to ingress regardless of any network policy,
+	// so add rules for that in the top level chains
 	if len(npc.ipRanges.ClusterIPRanges()) == 0 {
 		klog.Fatalf("Primary service cluster IP range is not configured")
 	}
@@ -318,7 +320,8 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() {
 				Comment: knftables.PtrTo("allow traffic to LoadBalancer IP range"),
 			})
 			if err := nftItf.Run(ctx, tx); err != nil {
-				klog.V(2).ErrorS(err, "nftables: couldn't setup chain for LoadBalancer IP range", "cidr", loadBalancerIPRange.String())
+				klog.V(2).ErrorS(err, "nftables: couldn't setup chain for LoadBalancer IP range",
+					"cidr", loadBalancerIPRange.String())
 			}
 		}
 	}
@@ -488,35 +491,40 @@ func nftIndexedSourceIPBlockSetName(namespace, policyName string, ingressRuleNo 
 	return kubeSourceIPSetPrefix + encoded[:16]
 }
 
-func nftIndexedSourceIPBlockExceptSetName(namespace, policyName string, ingressRuleNo int, ipFamily v1core.IPFamily) string {
+func nftIndexedSourceIPBlockExceptSetName(
+	namespace, policyName string, ingressRuleNo int, ipFamily v1core.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
 		string(ipFamily) + "ipblockexcept"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeSourceIPSetPrefix + encoded[:16]
 }
 
-func nftIndexedDestinationIPBlockSetName(namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
+func nftIndexedDestinationIPBlockSetName(
+	namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
 		string(ipFamily) + "ipblock"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIPSetPrefix + encoded[:16]
 }
 
-func nftIndexedDestinationIPBlockExceptSetName(namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
+func nftIndexedDestinationIPBlockExceptSetName(
+	namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
 		string(ipFamily) + "ipblockexcept"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIPSetPrefix + encoded[:16]
 }
 
-func nftIndexedIngressNamedPortSetName(namespace, policyName string, ingressRuleNo, namedPortNo int, ipFamily v1core.IPFamily) string {
+func nftIndexedIngressNamedPortSetName(
+	namespace, policyName string, ingressRuleNo, namedPortNo int, ipFamily v1core.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
 		strconv.Itoa(namedPortNo) + string(ipFamily) + "namedport"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIPSetPrefix + encoded[:16]
 }
 
-func nftIndexedEgressNamedPortSetName(namespace, policyName string, egressRuleNo, namedPortNo int, ipFamily v1core.IPFamily) string {
+func nftIndexedEgressNamedPortSetName(
+	namespace, policyName string, egressRuleNo, namedPortNo int, ipFamily v1core.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
 		strconv.Itoa(namedPortNo) + string(ipFamily) + "namedport"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
@@ -884,7 +892,8 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 
 		if len(egressRule.dstIPBlocks[ipFamily]) != 0 {
 			dstIPBlockSetName := nftIndexedDestinationIPBlockSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
-			dstIPBlockExceptSetName := nftIndexedDestinationIPBlockExceptSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
+			dstIPBlockExceptSetName := nftIndexedDestinationIPBlockExceptSetName(
+				policy.namespace, policy.name, ruleIdx, ipFamily)
 			activePolicyIPSets[dstIPBlockSetName] = true
 			hasExcepts := npc.nftAddOrReplaceIPBlockSet(tx, dstIPBlockSetName, dstIPBlockExceptSetName,
 				egressRule.dstIPBlocks[ipFamily], ipFamily)

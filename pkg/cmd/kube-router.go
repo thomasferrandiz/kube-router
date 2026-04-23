@@ -275,7 +275,8 @@ func (kr *KubeRouter) Run() error {
 			return fmt.Errorf("failed to create nftables interfaces: %v", err)
 		}
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
-			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, nil, iptablesCmdHandlers, ipSetHandlers, ipValidator, knftablesInterfaces, kr.Config.UseNftablesForNetpol)
+			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, nil,
+			iptablesCmdHandlers, ipSetHandlers, ipValidator, knftablesInterfaces, kr.Config.UseNftablesForNetpol)
 		if err != nil {
 			return fmt.Errorf("failed to create network policy controller: %v", err)
 		}

@@ -242,14 +242,18 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npcBase.networkPolicyEventHandler = npcBase.newNetworkPolicyEventHandler()
 
 	if useNftables {
-		// Cleanup any existing iptables rules before starting nftables controller to avoid conflicts in case of a restart with a different configuration
+		// Cleanup any existing iptables rules before starting nftables controller to avoid conflicts
+		// in case of a restart with a different configuration
 		npc := NetworkPolicyControllerIptables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
 		npc.Cleanup()
-		return NewNetworkPolicyControllerNftables(&npcBase, clientset, config, podInformer, npInformer, nsInformer, linkQ, knftInterfaces)
+		return NewNetworkPolicyControllerNftables(&npcBase, clientset, config,
+			podInformer, npInformer, nsInformer, linkQ, knftInterfaces)
 	} else {
-		// Cleanup any existing nftables rules before starting iptables controller to avoid conflicts in case of a restart with a different configuration
+		// Cleanup any existing nftables rules before starting iptables controller to avoid conflicts
+		// in case of a restart with a different configuration
 		npc := NetworkPolicyControllerNftables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
 		npc.Cleanup()
-		return NewNetworkPolicyControllerIptables(&npcBase, clientset, config, podInformer, npInformer, nsInformer, linkQ, iptablesCmdHandlers, ipSetHandlers)
+		return NewNetworkPolicyControllerIptables(&npcBase, clientset, config,
+			podInformer, npInformer, nsInformer, linkQ, iptablesCmdHandlers, ipSetHandlers)
 	}
 }

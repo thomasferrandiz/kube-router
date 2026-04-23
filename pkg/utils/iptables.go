@@ -234,7 +234,8 @@ func CommonICMPRules(family v1core.IPFamily) []ICMPRule {
 		{icmpProto, icmpType, nftProto, "echo-request", "echo-request", "allow icmp echo requests"},
 		// destination-unreachable here is also responsible for handling / allowing PMTU
 		// (https://en.wikipedia.org/wiki/Path_MTU_Discovery) responses
-		{icmpProto, icmpType, nftProto, "destination-unreachable", "destination-unreachable", "allow icmp destination unreachable messages"},
+		{icmpProto, icmpType, nftProto,
+			"destination-unreachable", "destination-unreachable", "allow icmp destination unreachable messages"},
 		{icmpProto, icmpType, nftProto, "time-exceeded", "time-exceeded", "allow icmp time exceeded messages"},
 	}
 
@@ -244,8 +245,10 @@ func CommonICMPRules(family v1core.IPFamily) []ICMPRule {
 		// previous kube-router versions.
 		// Note: nftables uses different names for ICMPv6 neighbor discovery types than iptables does.
 		icmpRules = append(icmpRules, []ICMPRule{
-			{ICMPv6Proto, ICMPv6Type, NftablesICMPv6Proto, "neighbor-solicitation", "nd-neighbor-solicit", "allow icmp neighbor solicitation messages"},
-			{ICMPv6Proto, ICMPv6Type, NftablesICMPv6Proto, "neighbor-advertisement", "nd-neighbor-advert", "allow icmp neighbor advertisement messages"},
+			{ICMPv6Proto, ICMPv6Type, NftablesICMPv6Proto,
+				"neighbor-solicitation", "nd-neighbor-solicit", "allow icmp neighbor solicitation messages"},
+			{ICMPv6Proto, ICMPv6Type, NftablesICMPv6Proto,
+				"neighbor-advertisement", "nd-neighbor-advert", "allow icmp neighbor advertisement messages"},
 			{ICMPv6Proto, ICMPv6Type, NftablesICMPv6Proto, "echo-reply", "echo-reply", "allow icmp echo reply messages"},
 		}...)
 	}

@@ -468,7 +468,8 @@ func (npc *NetworkPolicyControllerIptables) processEgressRules(policy networkPol
 	return nil
 }
 
-func (npc *NetworkPolicyControllerIptables) appendRuleToPolicyChain(policyChainName, comment, srcIPSetName, dstIPSetName,
+func (npc *NetworkPolicyControllerIptables) appendRuleToPolicyChain(
+	policyChainName, comment, srcIPSetName, dstIPSetName,
 	protocol, dPort, endDport string, ipFamily api.IPFamily) error {
 
 	args := make([]string, 0)
@@ -786,7 +787,8 @@ func (npc *NetworkPolicyControllerBase) ListPodsByNamespaceAndLabels(namespace s
 	return allMatchedNameSpacePods, nil
 }
 
-func (npc *NetworkPolicyControllerBase) ListNamespaceByLabels(namespaceSelector labels.Selector) ([]*api.Namespace, error) {
+func (npc *NetworkPolicyControllerBase) ListNamespaceByLabels(
+	namespaceSelector labels.Selector) ([]*api.Namespace, error) {
 	namespaceLister := listers.NewNamespaceLister(npc.nsLister)
 	matchedNamespaces, err := namespaceLister.List(namespaceSelector)
 	if err != nil {

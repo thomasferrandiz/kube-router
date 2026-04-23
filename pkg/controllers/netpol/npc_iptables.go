@@ -32,8 +32,8 @@ type NetworkPolicyControllerIptables struct {
 }
 
 // Run runs forever till we receive notification on stopCh
-func (npc *NetworkPolicyControllerIptables) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
-	wg *sync.WaitGroup) {
+func (npc *NetworkPolicyControllerIptables) Run(
+	healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(npc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
