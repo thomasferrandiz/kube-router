@@ -934,6 +934,85 @@ var _ = Describe("NetworkPolicy", func() {
 			assertBlocked(recycled, podIPv4(server), serverPort)
 		})
 	})
+
+	// -----------------------------------------------------------------------
+	// 3g. Kubernetes API server connectivity
+	// -----------------------------------------------------------------------
+
+	Describe("Kubernetes API server connectivity", func() {
+
+		// Test 88
+		It("allows a pod to connect to the Kubernetes API server", func() {
+			ns := createNamespace(nil)
+			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+
+			// The Kubernetes API server is accessible via the kubernetes service
+			// in the default namespace. We'll test connectivity using curl with
+			// the pod's service account token.
+			Eventually(func() bool {
+				cmd := []string{
+					"/bin/sh", "-c",
+					`curl -sk -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kubernetes.default.svc.cluster.local/api/`,
+				}
+				stdout, stderr, exitCode, err := execInPod(ns.Name, client.Name, "client", cmd)
+				success := err == nil && exitCode == 0 && strings.Contains(stdout, "APIVersions")
+				GinkgoWriter.Printf("[probe] API server connectivity test: exit=%d err=%v success=%v\n  stdout: %s\n  stderr: %s\n",
+					exitCode, err, success, strings.TrimSpace(stdout), strings.TrimSpace(stderr))
+				return success
+			}, pollTimeout, pollInterval).Should(BeTrue(),
+				"pod %s/%s should be able to connect to the Kubernetes API server",
+				ns.Name, client.Name)
+		})
+
+		// Test 89
+		It("blocks API server access when egress policy denies it", func() {
+			ns := createNamespace(nil)
+			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+
+			// First verify baseline connectivity to the API server.
+			cmd := []string{
+				"/bin/sh", "-c",
+				`curl -sk -m 5 -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kubernetes.default.svc.cluster.local/api/`,
+			}
+			Eventually(func() bool {
+				stdout, _, exitCode, err := execInPod(ns.Name, client.Name, "client", cmd)
+				return err == nil && exitCode == 0 && strings.Contains(stdout, "APIVersions")
+			}, pollTimeout, pollInterval).Should(BeTrue(), "baseline API server connectivity")
+
+			// Apply an egress policy that blocks all traffic except DNS.
+			// This should block access to the API server.
+			applyPolicy(&netv1.NetworkPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "block-api-server", Namespace: ns.Name},
+				Spec: netv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "client"}},
+					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
+					Egress: []netv1.NetworkPolicyEgressRule{
+						{
+							// Allow DNS only.
+							Ports: []netv1.NetworkPolicyPort{{
+								Protocol: func() *corev1.Protocol { p := corev1.ProtocolUDP; return &p }(),
+								Port:     func() *intstr.IntOrString { p := intstr.FromInt(53); return &p }(),
+							}},
+						},
+					},
+				},
+			})
+
+			// Give kube-router time to sync.
+			time.Sleep(pollInterval)
+
+			// Now verify that API server access is blocked.
+			Consistently(func() bool {
+				stdout, _, exitCode, err := execInPod(ns.Name, client.Name, "client", cmd)
+				// Connection should fail (timeout or connection refused).
+				blocked := err != nil || exitCode != 0 || !strings.Contains(stdout, "APIVersions")
+				GinkgoWriter.Printf("[probe] API server blocked check: exit=%d err=%v blocked=%v\n",
+					exitCode, err, blocked)
+				return blocked
+			}, consistentlyDuration, pollInterval).Should(BeTrue(),
+				"API server access should be blocked by egress policy")
+		})
+	})
 })
 
 // Ensure the intstr import is used (named port helper).
