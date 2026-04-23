@@ -94,8 +94,18 @@ func (npc *NetworkPolicyControllerNftables) Run(
 	var cancel context.CancelFunc
 	npc.ctx, cancel = context.WithCancel(context.Background())
 
+	// Ensure cancel is only called once to prevent race condition
+	var cancelOnce sync.Once
+	safeCancel := func() {
+		cancelOnce.Do(func() {
+			cancel()
+		})
+	}
+
 	// setup kube-router specific top level custom chains (KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT)
-	npc.ensureTopLevelChains()
+	if err := npc.ensureTopLevelChains(); err != nil {
+		klog.Fatalf("Failed to setup top level chains: %v", err)
+	}
 
 	// setup default network policy chain that is applied to traffic from/to the pods that does not match any network
 	// policy
@@ -115,14 +125,14 @@ func (npc *NetworkPolicyControllerNftables) Run(
 			select {
 			case <-stopCh:
 				klog.Info("Shutting down network policies full sync goroutine")
-				cancel()
+				safeCancel()
 				return
 			default:
 			}
 			select {
 			case <-stopCh:
 				klog.Info("Shutting down network policies full sync goroutine")
-				cancel()
+				safeCancel()
 				return
 			case <-fullSyncRequest:
 				klog.V(3).Info("Received request for a full sync, processing")
@@ -138,7 +148,7 @@ func (npc *NetworkPolicyControllerNftables) Run(
 		select {
 		case <-stopCh:
 			klog.Infof("Shutting down network policies controller")
-			cancel()
+			safeCancel()
 			return
 		case <-t.C:
 		}
@@ -163,7 +173,10 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() {
 	klog.V(1).Infof("Starting sync of nftables with version: %s", syncVersion)
 
 	// ensure kube-router specific top level chains and corresponding rules exist
-	npc.ensureTopLevelChains()
+	if err := npc.ensureTopLevelChains(); err != nil {
+		klog.Errorf("Aborting sync. Failed to ensure top level chains: %v", err)
+		return
+	}
 
 	// ensure default network policy chain that is applied to traffic from/to the pods that does not match any network
 	// policy
@@ -184,7 +197,11 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() {
 		return
 	}
 
-	activePodFwChains := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
+	activePodFwChains, err := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
+	if err != nil {
+		klog.Errorf("Aborting sync. Failed to sync pod firewall chains: %v", err.Error())
+		return
+	}
 	klog.V(3).Infof("Active pod firewall chains: %d", len(activePodFwChains))
 
 	// Makes sure that the ACCEPT rules for packets marked with "0x20000" are added to the end of each of kube-router's
@@ -198,7 +215,7 @@ func (npc *NetworkPolicyControllerNftables) nftablesNodePortRange() string {
 	return strings.ReplaceAll(npc.serviceNodePortRange, ":", "-")
 }
 
-func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() {
+func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() error {
 	ctx := npc.ctx
 	klog.V(2).Infof("Creating top level input chains")
 
@@ -219,14 +236,15 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() {
 		}
 		err := nft.Run(ctx, tx)
 		if err != nil {
-			klog.V(2).ErrorS(err, "nftables: couldn't setup top level input chains")
+			klog.ErrorS(err, "nftables: couldn't setup top level input chains")
+			return fmt.Errorf("failed to setup top level chains: %w", err)
 		}
 	}
 
 	// traffic towards service CIDRs should be allowed to ingress regardless of any network policy,
 	// so add rules for that in the top level chains
 	if len(npc.ipRanges.ClusterIPRanges()) == 0 {
-		klog.Fatalf("Primary service cluster IP range is not configured")
+		return fmt.Errorf("primary service cluster IP range is not configured")
 	}
 	for _, family := range []v1core.IPFamily{v1core.IPv4Protocol, v1core.IPv6Protocol} {
 		nftItf, ok := npc.knftInterfaces[family]
@@ -250,7 +268,8 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() {
 				Comment: knftables.PtrTo("allow traffic to primary/secondary cluster IP range"),
 			})
 			if err := nftItf.Run(ctx, tx); err != nil {
-				klog.V(2).ErrorS(err, "nftables: couldn't setup chain for cluster IP range", "cidr", serviceRange.String())
+				klog.ErrorS(err, "nftables: couldn't setup chain for cluster IP range", "cidr", serviceRange.String())
+				return fmt.Errorf("failed to setup cluster IP range %s: %w", serviceRange.String(), err)
 			}
 		}
 	}
@@ -277,8 +296,8 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() {
 		}
 		err := nft.Run(ctx, tx)
 		if err != nil {
-			klog.V(2).ErrorS(err, "nftables: failed to add rules for node port range")
-			continue
+			klog.ErrorS(err, "nftables: failed to add rules for node port range")
+			return fmt.Errorf("failed to add rules for node port range (family %s): %w", family, err)
 		}
 	}
 
@@ -304,7 +323,8 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() {
 				Comment: knftables.PtrTo("allow traffic to External IP range"),
 			})
 			if err := nftItf.Run(ctx, tx); err != nil {
-				klog.V(2).ErrorS(err, "nftables: couldn't setup chain for External IP range", "cidr", externalIPRange.String())
+				klog.ErrorS(err, "nftables: couldn't setup chain for External IP range", "cidr", externalIPRange.String())
+				return fmt.Errorf("failed to setup External IP range %s: %w", externalIPRange.String(), err)
 			}
 		}
 		for _, loadBalancerIPRange := range npc.ipRanges.LoadBalancerIPRanges(family) {
@@ -320,11 +340,13 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() {
 				Comment: knftables.PtrTo("allow traffic to LoadBalancer IP range"),
 			})
 			if err := nftItf.Run(ctx, tx); err != nil {
-				klog.V(2).ErrorS(err, "nftables: couldn't setup chain for LoadBalancer IP range",
+				klog.ErrorS(err, "nftables: couldn't setup chain for LoadBalancer IP range",
 					"cidr", loadBalancerIPRange.String())
+				return fmt.Errorf("failed to setup LoadBalancer IP range %s: %w", loadBalancerIPRange.String(), err)
 			}
 		}
 	}
+	return nil
 }
 
 // Creates custom chains KUBE-NWPLCY-DEFAULT which holds rules for the default network policy. This is applied to
@@ -1061,10 +1083,11 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 // adds jump rules into the top-level chains so that all traffic to/from the pod flows through it.
 // It returns the set of active pod firewall chain names for the caller to use during garbage collection.
 func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
-	networkPoliciesInfo []networkPolicyInfo, version string) map[string]bool {
+	networkPoliciesInfo []networkPolicyInfo, version string) (map[string]bool, error) {
 
 	ctx := npc.ctx
 	activePodFwChains := make(map[string]bool)
+	var errs []error
 
 	// Collect all local pods across all node IPs.
 	allLocalPods := make(map[string]podInfo)
@@ -1223,6 +1246,8 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 			if err := nft.Run(ctx, tx); err != nil {
 				klog.Errorf("nftables: failed to sync pod firewall chain for pod %s/%s family %s: %v",
 					pod.namespace, pod.name, ipFamily, err)
+				errs = append(errs, fmt.Errorf("failed to sync pod firewall chain for %s/%s (family %s): %w",
+					pod.namespace, pod.name, ipFamily, err))
 			}
 		}
 	}
@@ -1231,7 +1256,8 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 	for _, nft := range npc.knftInterfaces {
 		existingChains, err := nft.List(ctx, "chains")
 		if err != nil {
-			klog.Warningf("nftables: could not list chains for pod fw cleanup: %v", err)
+			klog.Errorf("nftables: could not list chains for pod fw cleanup: %v", err)
+			errs = append(errs, fmt.Errorf("failed to list chains for cleanup: %w", err))
 			continue
 		}
 		tx := nft.NewTransaction()
@@ -1244,12 +1270,16 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 		}
 		if anyDeletions {
 			if err := nft.Run(ctx, tx); err != nil {
-				klog.Warningf("nftables: failed to cleanup stale pod fw chains: %v", err)
+				klog.Errorf("nftables: failed to cleanup stale pod fw chains: %v", err)
+				errs = append(errs, fmt.Errorf("failed to cleanup stale pod firewall chains: %w", err))
 			}
 		}
 	}
 
-	return activePodFwChains
+	if len(errs) > 0 {
+		return activePodFwChains, fmt.Errorf("encountered %d errors during pod firewall chain sync: %v", len(errs), errs)
+	}
+	return activePodFwChains, nil
 }
 
 func (npc *NetworkPolicyControllerNftables) ensureExplicitAccept() {

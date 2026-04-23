@@ -42,7 +42,9 @@ func (npc *NetworkPolicyControllerIptables) Run(
 	npc.healthChan = healthChan
 
 	// setup kube-router specific top level custom chains (KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT)
-	npc.ensureTopLevelChains()
+	if err := npc.ensureTopLevelChains(); err != nil {
+		klog.Fatalf("Failed to setup top level chains: %v", err)
+	}
 
 	// setup default network policy chain that is applied to traffic from/to the pods that does not match any network
 	// policy
@@ -127,7 +129,10 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() {
 	klog.V(1).Infof("Starting sync of iptables with version: %s", syncVersion)
 
 	// ensure kube-router specific top level chains and corresponding rules exist
-	npc.ensureTopLevelChains()
+	if err := npc.ensureTopLevelChains(); err != nil {
+		klog.Errorf("Aborting sync. Failed to ensure top level chains: %v", err)
+		return
+	}
 
 	// ensure default network policy chain that is applied to traffic from/to the pods that does not match any network
 	// policy
@@ -248,7 +253,7 @@ func (npc *NetworkPolicyControllerIptables) allowTrafficToClusterIPRange(
 // -A INPUT   -m comment --comment "kube-router netpol" -j KUBE-ROUTER-INPUT
 // -A FORWARD -m comment --comment "kube-router netpol" -j KUBE-ROUTER-FORWARD
 // -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
-func (npc *NetworkPolicyControllerIptables) ensureTopLevelChains() {
+func (npc *NetworkPolicyControllerIptables) ensureTopLevelChains() error {
 	const serviceVIPPosition = 1
 	rulePosition := map[v1core.IPFamily]int{v1core.IPv4Protocol: 1, v1core.IPv6Protocol: 1}
 
@@ -428,6 +433,7 @@ func (npc *NetworkPolicyControllerIptables) ensureTopLevelChains() {
 			rulePosition[family]++
 		}
 	}
+	return nil
 }
 
 func (npc *NetworkPolicyControllerIptables) ensureExplicitAccept() {

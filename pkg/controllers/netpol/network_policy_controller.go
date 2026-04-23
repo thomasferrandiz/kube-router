@@ -60,7 +60,7 @@ type NetworkPolicyController interface {
 	Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup)
 	RequestFullSync()
 	fullPolicySync()
-	ensureTopLevelChains()
+	ensureTopLevelChains() error
 	ensureDefaultNetworkPolicyChain()
 	ensureCommonPolicyChain()
 
