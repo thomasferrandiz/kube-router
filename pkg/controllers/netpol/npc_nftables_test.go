@@ -300,16 +300,10 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 				tx.Flush(&knftables.Chain{Name: policyChainName})
 
 				if np.policyType == kubeEgressPolicyType || np.policyType == kubeBothPolicyType {
-					err = krNetPol.processEgressRulesNft(tx, np, "", nil, "1", ipFamily)
-					if err != nil {
-						t.Errorf("Error syncing the rules: %s", err)
-					}
+					krNetPol.processEgressRulesNft(tx, np, "", nil, "1", ipFamily)
 				}
 				if np.policyType == kubeIngressPolicyType || np.policyType == kubeBothPolicyType {
-					err = krNetPol.processIngressRulesNft(tx, np, "", nil, "1", ipFamily)
-					if err != nil {
-						t.Errorf("Error syncing the rules: %s", err)
-					}
+					krNetPol.processIngressRulesNft(tx, np, "", nil, "1", ipFamily)
 				}
 				if err = nft.Run(ctx, tx); err != nil {
 					t.Errorf("Error running nftables transaction: %s", err)
@@ -545,14 +539,10 @@ func runNftPolicyRules(t *testing.T, npc *NetworkPolicyControllerNftables) {
 			activeSets := make(map[string]bool)
 
 			if np.policyType == kubeEgressPolicyType || np.policyType == kubeBothPolicyType {
-				if err := npc.processEgressRulesNft(tx, np, "", activeSets, "1", ipFamily); err != nil {
-					t.Fatalf("processEgressRulesNft failed: %v", err)
-				}
+				npc.processEgressRulesNft(tx, np, "", activeSets, "1", ipFamily)
 			}
 			if np.policyType == kubeIngressPolicyType || np.policyType == kubeBothPolicyType {
-				if err := npc.processIngressRulesNft(tx, np, "", activeSets, "1", ipFamily); err != nil {
-					t.Fatalf("processIngressRulesNft failed: %v", err)
-				}
+				npc.processIngressRulesNft(tx, np, "", activeSets, "1", ipFamily)
 			}
 			if err := nft.Run(ctx, tx); err != nil {
 				t.Fatalf("nft.Run failed: %v", err)
