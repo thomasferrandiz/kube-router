@@ -88,7 +88,7 @@ func TestBasicChains(t *testing.T) {
 	krNetPol := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
 	tCreateFakePods(t, podInformer, nsInformer)
 
-	krNetPol.ensureTopLevelChains()
+	require.NoError(t, krNetPol.ensureTopLevelChains())
 	krNetPol.ensureDefaultNetworkPolicyChain()
 	krNetPol.ensureCommonPolicyChain()
 	fakeIPv4Itf, ok := krNetPol.knftInterfaces[v1core.IPv4Protocol].(*knftables.Fake)
@@ -414,7 +414,7 @@ func TestFullPolicySync(t *testing.T) {
 	addNetworkPoliciesToInformer(t, npInformer.GetStore(), networkPolicies)
 	addNamespacesToInformer(nsInformer.GetStore(), namespaces)
 
-	npc.ensureTopLevelChains()
+	require.NoError(t, npc.ensureTopLevelChains())
 	npc.ensureDefaultNetworkPolicyChain()
 	npc.ensureCommonPolicyChain()
 
@@ -813,7 +813,7 @@ func TestNftablesChainsIdempotency(t *testing.T) {
 	npc := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
 
 	// First invocation.
-	npc.ensureTopLevelChains()
+	require.NoError(t, npc.ensureTopLevelChains())
 	npc.ensureDefaultNetworkPolicyChain()
 	npc.ensureCommonPolicyChain()
 
@@ -822,7 +822,7 @@ func TestNftablesChainsIdempotency(t *testing.T) {
 	dumpAfterFirst := fakeItf.Dump()
 
 	// Second invocation – must produce the same state.
-	npc.ensureTopLevelChains()
+	require.NoError(t, npc.ensureTopLevelChains())
 	npc.ensureDefaultNetworkPolicyChain()
 	npc.ensureCommonPolicyChain()
 	dumpAfterSecond := fakeItf.Dump()
@@ -882,7 +882,7 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	npc.ensureTopLevelChains()
+	require.NoError(t, npc.ensureTopLevelChains())
 	npc.ensureDefaultNetworkPolicyChain()
 	npc.ensureCommonPolicyChain()
 
@@ -1005,7 +1005,7 @@ func TestNftablesNodePortRange(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			npc.ensureTopLevelChains()
+			require.NoError(t, npc.ensureTopLevelChains())
 
 			dump := ipv4KNft.Dump()
 			t.Logf("nftables dump:\n%s", dump)
