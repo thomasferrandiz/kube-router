@@ -681,6 +681,51 @@ func (npc *NetworkPolicyControllerNftables) appendRuleToPolicyChainNft(
 // ingress / egress rule processors
 // ---------------------------------------------------------------------------
 
+// nftAddPodMatchRules appends nftables rules for a pod-selector match block (the
+// `srcPods`/`dstPods` sub-section that is structurally identical in both ingress and egress
+// processing). podSetName is the set of matched pods; counterSetName is the always-present
+// opposite set (targetDest for ingress, targetSource for egress). When podIsSource is true
+// the pod set acts as traffic source (ingress); when false it acts as destination (egress).
+func (npc *NetworkPolicyControllerNftables) nftAddPodMatchRules(
+	tx *knftables.Transaction, policyChainName string, policy networkPolicyInfo,
+	activePolicyIPSets map[string]bool, ruleIdx int, ipFamily v1core.IPFamily,
+	podSetName, counterSetName string,
+	ports []protocolAndPort, namedPorts []endPoints,
+	namedPortSetNameFn func(string, string, int, int, v1core.IPFamily) string,
+	podIsSource bool) {
+
+	srcSet, dstSet := podSetName, counterSetName
+	if !podIsSource {
+		srcSet, dstSet = counterSetName, podSetName
+	}
+
+	for _, portProtocol := range ports {
+		comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
+			policy.name + " namespace " + policy.namespace
+		npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
+			srcSet, dstSet,
+			portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
+	}
+
+	for epIdx, ep := range namedPorts {
+		namedPortSetName := namedPortSetNameFn(policy.namespace, policy.name, ruleIdx, epIdx, ipFamily)
+		activePolicyIPSets[namedPortSetName] = true
+		npc.nftAddOrReplaceIPSet(tx, namedPortSetName, ep.ips[ipFamily], ipFamily)
+		comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
+			policy.name + " namespace " + policy.namespace
+		npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
+			srcSet, namedPortSetName,
+			ep.protocol, ep.port, ep.endport, ipFamily)
+	}
+
+	if len(ports) == 0 && len(namedPorts) == 0 {
+		comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
+			policy.name + " namespace " + policy.namespace
+		npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
+			srcSet, dstSet, "", "", "", ipFamily)
+	}
+}
+
 func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 	tx *knftables.Transaction, policy networkPolicyInfo,
 	targetDestPodSetName string, activePolicyIPSets map[string]bool,
@@ -699,38 +744,9 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 			activePolicyIPSets[srcPodSetName] = true
 			npc.nftAddOrReplaceIPSet(tx, srcPodSetName,
 				getIPsFromPods(ingressRule.srcPods, ipFamily), ipFamily)
-
-			if len(ingressRule.ports) != 0 {
-				for _, portProtocol := range ingressRule.ports {
-					comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
-						policy.name + " namespace " + policy.namespace
-					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
-						srcPodSetName, targetDestPodSetName,
-						portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
-				}
-			}
-
-			if len(ingressRule.namedPorts) != 0 {
-				for epIdx, endPoints := range ingressRule.namedPorts {
-					namedPortSetName := nftIndexedIngressNamedPortSetName(policy.namespace,
-						policy.name, ruleIdx, epIdx, ipFamily)
-					activePolicyIPSets[namedPortSetName] = true
-					npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
-						endPoints.ips[ipFamily], ipFamily)
-					comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
-						policy.name + " namespace " + policy.namespace
-					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
-						srcPodSetName, namedPortSetName,
-						endPoints.protocol, endPoints.port, endPoints.endport, ipFamily)
-				}
-			}
-
-			if len(ingressRule.ports) == 0 && len(ingressRule.namedPorts) == 0 {
-				comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
-					policy.name + " namespace " + policy.namespace
-				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
-					srcPodSetName, targetDestPodSetName, "", "", "", ipFamily)
-			}
+			npc.nftAddPodMatchRules(tx, policyChainName, policy, activePolicyIPSets, ruleIdx, ipFamily,
+				srcPodSetName, targetDestPodSetName,
+				ingressRule.ports, ingressRule.namedPorts, nftIndexedIngressNamedPortSetName, true)
 		}
 
 		if ingressRule.matchAllSource && !ingressRule.matchAllPorts {
@@ -832,38 +848,9 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 			activePolicyIPSets[dstPodSetName] = true
 			npc.nftAddOrReplaceIPSet(tx, dstPodSetName,
 				getIPsFromPods(egressRule.dstPods, ipFamily), ipFamily)
-
-			if len(egressRule.ports) != 0 {
-				for _, portProtocol := range egressRule.ports {
-					comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
-						policy.name + " namespace " + policy.namespace
-					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
-						targetSourcePodSetName, dstPodSetName,
-						portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
-				}
-			}
-
-			if len(egressRule.namedPorts) != 0 {
-				for epIdx, endPoints := range egressRule.namedPorts {
-					namedPortSetName := nftIndexedEgressNamedPortSetName(policy.namespace,
-						policy.name, ruleIdx, epIdx, ipFamily)
-					activePolicyIPSets[namedPortSetName] = true
-					npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
-						endPoints.ips[ipFamily], ipFamily)
-					comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
-						policy.name + " namespace " + policy.namespace
-					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
-						targetSourcePodSetName, namedPortSetName,
-						endPoints.protocol, endPoints.port, endPoints.endport, ipFamily)
-				}
-			}
-
-			if len(egressRule.ports) == 0 && len(egressRule.namedPorts) == 0 {
-				comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
-					policy.name + " namespace " + policy.namespace
-				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
-					targetSourcePodSetName, dstPodSetName, "", "", "", ipFamily)
-			}
+			npc.nftAddPodMatchRules(tx, policyChainName, policy, activePolicyIPSets, ruleIdx, ipFamily,
+				dstPodSetName, targetSourcePodSetName,
+				egressRule.ports, egressRule.namedPorts, nftIndexedEgressNamedPortSetName, false)
 		}
 
 		if egressRule.matchAllDestinations && !egressRule.matchAllPorts {
