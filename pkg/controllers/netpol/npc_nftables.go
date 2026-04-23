@@ -222,7 +222,7 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() {
 		}
 	}
 
-	//traffic towards service CIDRs should be allowed to ingress regardless of any network policy, so add rules for that in the top level chains
+	// traffic towards service CIDRs should be allowed to ingress regardless of any network policy, so add rules for that in the top level chains
 	if len(npc.ipRanges.ClusterIPRanges()) == 0 {
 		klog.Fatalf("Primary service cluster IP range is not configured")
 	}
@@ -528,9 +528,9 @@ func nftIndexedEgressNamedPortSetName(namespace, policyName string, egressRuleNo
 // ---------------------------------------------------------------------------
 
 // nftAddOrReplaceIPSet declares a named nftables set and flushes+repopulates its elements
-// within the given transaction. Set isNet=true for CIDR/subnet entries (interval set).
+// within the given transaction.
 func (npc *NetworkPolicyControllerNftables) nftAddOrReplaceIPSet(
-	tx *knftables.Transaction, setName string, entries []string, ipFamily v1core.IPFamily, isNet bool) {
+	tx *knftables.Transaction, setName string, entries []string, ipFamily v1core.IPFamily) {
 
 	setType := "ipv4_addr"
 	if ipFamily == v1core.IPv6Protocol {
@@ -540,9 +540,6 @@ func (npc *NetworkPolicyControllerNftables) nftAddOrReplaceIPSet(
 		Name:    setName,
 		Type:    setType,
 		Comment: knftables.PtrTo("set for network policy"),
-	}
-	if isNet {
-		set.Flags = []knftables.SetFlag{knftables.IntervalFlag}
 	}
 	tx.Add(set)
 	tx.Flush(&knftables.Set{Name: setName})
@@ -679,10 +676,10 @@ func (npc *NetworkPolicyControllerNftables) appendRuleToPolicyChainNft(
 func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 	tx *knftables.Transaction, policy networkPolicyInfo,
 	targetDestPodSetName string, activePolicyIPSets map[string]bool,
-	version string, ipFamily v1core.IPFamily) error {
+	version string, ipFamily v1core.IPFamily) {
 
 	if policy.ingressRules == nil {
-		return nil
+		return
 	}
 
 	policyChainName := networkPolicyChainName(policy.namespace, policy.name, version, ipFamily)
@@ -693,7 +690,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 			srcPodSetName := nftIndexedSourcePodSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
 			activePolicyIPSets[srcPodSetName] = true
 			npc.nftAddOrReplaceIPSet(tx, srcPodSetName,
-				getIPsFromPods(ingressRule.srcPods, ipFamily), ipFamily, false)
+				getIPsFromPods(ingressRule.srcPods, ipFamily), ipFamily)
 
 			if len(ingressRule.ports) != 0 {
 				for _, portProtocol := range ingressRule.ports {
@@ -711,7 +708,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 						policy.name, ruleIdx, epIdx, ipFamily)
 					activePolicyIPSets[namedPortSetName] = true
 					npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
-						endPoints.ips[ipFamily], ipFamily, false)
+						endPoints.ips[ipFamily], ipFamily)
 					comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
 						policy.name + " namespace " + policy.namespace
 					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
@@ -741,7 +738,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 					policy.name, ruleIdx, epIdx, ipFamily)
 				activePolicyIPSets[namedPortSetName] = true
 				npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
-					endPoints.ips[ipFamily], ipFamily, false)
+					endPoints.ips[ipFamily], ipFamily)
 				comment := "ACCEPT traffic from all sources to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
@@ -791,7 +788,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 						policy.name, ruleIdx, epIdx, ipFamily)
 					activePolicyIPSets[namedPortSetName] = true
 					npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
-						endPoints.ips[ipFamily], ipFamily, false)
+						endPoints.ips[ipFamily], ipFamily)
 					comment := "ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
 					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
@@ -807,17 +804,15 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 			}
 		}
 	}
-
-	return nil
 }
 
 func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 	tx *knftables.Transaction, policy networkPolicyInfo,
 	targetSourcePodSetName string, activePolicyIPSets map[string]bool,
-	version string, ipFamily v1core.IPFamily) error {
+	version string, ipFamily v1core.IPFamily) {
 
 	if policy.egressRules == nil {
-		return nil
+		return
 	}
 
 	policyChainName := networkPolicyChainName(policy.namespace, policy.name, version, ipFamily)
@@ -828,7 +823,7 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 			dstPodSetName := nftIndexedDestinationPodSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
 			activePolicyIPSets[dstPodSetName] = true
 			npc.nftAddOrReplaceIPSet(tx, dstPodSetName,
-				getIPsFromPods(egressRule.dstPods, ipFamily), ipFamily, false)
+				getIPsFromPods(egressRule.dstPods, ipFamily), ipFamily)
 
 			if len(egressRule.ports) != 0 {
 				for _, portProtocol := range egressRule.ports {
@@ -846,7 +841,7 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 						policy.name, ruleIdx, epIdx, ipFamily)
 					activePolicyIPSets[namedPortSetName] = true
 					npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
-						endPoints.ips[ipFamily], ipFamily, false)
+						endPoints.ips[ipFamily], ipFamily)
 					comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
 						policy.name + " namespace " + policy.namespace
 					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
@@ -925,8 +920,6 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 			}
 		}
 	}
-
-	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -992,24 +985,20 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 				// Destination-pod set – all pods targeted by this policy (used for ingress matching).
 				targetDestPodSetName := nftDestinationPodSetName(policy.namespace, policy.name, ipFamily)
 				activePolicyIPSets[targetDestPodSetName] = true
-				npc.nftAddOrReplaceIPSet(tx, targetDestPodSetName, currentPodIPs[ipFamily], ipFamily, false)
+				npc.nftAddOrReplaceIPSet(tx, targetDestPodSetName, currentPodIPs[ipFamily], ipFamily)
 
-				if err := npc.processIngressRulesNft(tx, policy, targetDestPodSetName,
-					activePolicyIPSets, version, ipFamily); err != nil {
-					return nil, nil, err
-				}
+				npc.processIngressRulesNft(tx, policy, targetDestPodSetName,
+					activePolicyIPSets, version, ipFamily)
 			}
 
 			if policy.policyType == kubeBothPolicyType || policy.policyType == kubeEgressPolicyType {
 				// Source-pod set – all pods targeted by this policy (used for egress matching).
 				targetSourcePodSetName := nftSourcePodSetName(policy.namespace, policy.name, ipFamily)
 				activePolicyIPSets[targetSourcePodSetName] = true
-				npc.nftAddOrReplaceIPSet(tx, targetSourcePodSetName, currentPodIPs[ipFamily], ipFamily, false)
+				npc.nftAddOrReplaceIPSet(tx, targetSourcePodSetName, currentPodIPs[ipFamily], ipFamily)
 
-				if err := npc.processEgressRulesNft(tx, policy, targetSourcePodSetName,
-					activePolicyIPSets, version, ipFamily); err != nil {
-					return nil, nil, err
-				}
+				npc.processEgressRulesNft(tx, policy, targetSourcePodSetName,
+					activePolicyIPSets, version, ipFamily)
 			}
 
 			if err := nft.Run(ctx, tx); err != nil {

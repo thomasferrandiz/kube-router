@@ -115,7 +115,7 @@ func setupIntegrationEnv(t *testing.T, tableName string) (
 	nftItf = skipIfNoNftables(t, knftables.IPv4Family, tableName)
 
 	client := fake.NewSimpleClientset(
-		&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}},
+		&v1.NodeList{Items: []v1.Node{*newFakeNode([]string{"10.10.10.10"})}},
 	)
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -346,7 +346,7 @@ func TestIntegrationDualStackTables(t *testing.T) {
 
 	// Build a dual-stack NPC and call ensureTopLevelChains on both families.
 	client := fake.NewSimpleClientset(
-		&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}},
+		&v1.NodeList{Items: []v1.Node{*newFakeNode([]string{"10.10.10.10"})}},
 	)
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctxC, cancel := context.WithCancel(context.Background())

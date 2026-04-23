@@ -290,11 +290,10 @@ func tcpPort(port int) netv1.NetworkPolicyPort {
 }
 
 // tcpPortRange returns a *netv1.NetworkPolicyPort covering [start, end].
-func tcpPortRange(start, end int) netv1.NetworkPolicyPort {
+func tcpPortRange(start, end int32) netv1.NetworkPolicyPort {
 	proto := corev1.ProtocolTCP
-	p := intstr.FromInt(start)
-	e := int32(end)
-	return netv1.NetworkPolicyPort{Protocol: &proto, Port: &p, EndPort: &e}
+	p := intstr.FromInt(int(start))
+	return netv1.NetworkPolicyPort{Protocol: &proto, Port: &p, EndPort: &end}
 }
 
 // namedTCPPort returns a *netv1.NetworkPolicyPort for a named TCP port.

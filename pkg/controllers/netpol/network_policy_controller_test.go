@@ -180,14 +180,15 @@ func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInfo
 }
 
 // newFakeNode is a helper function for creating Nodes for testing.
-func newFakeNode(name string, addrs []string) *v1.Node {
+func newFakeNode(addrs []string) *v1.Node {
+	const nodeName = "node"
 	addresses := make([]v1.NodeAddress, len(addrs))
 	for i, addr := range addrs {
 		addresses[i] = v1.NodeAddress{Type: v1.NodeExternalIP, Address: addr}
 	}
 
 	return &v1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 		Status: v1.NodeStatus{
 			Capacity: v1.ResourceList{
 				v1.ResourceCPU:    resource.MustParse("1"),
@@ -404,7 +405,7 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -560,7 +561,7 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -950,7 +951,7 @@ func TestNetworkPolicyController(t *testing.T) {
 	}
 	fakeNodeIPs := []string{"10.10.10.10", "2001:0db8:0042:0001:0000:0000:0000:0000"}
 	fakeLinkQuerier := utils.NewFakeLocalLinkQuerier(fakeNodeIPs, nil)
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", fakeNodeIPs)}})
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode(fakeNodeIPs)}})
 	_, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	for _, useNfTables := range []bool{false, true} {
 		for _, test := range testCases {
@@ -1014,7 +1015,7 @@ func TestNetworkPolicyController(t *testing.T) {
 // parses all relevant edge-case rule permutations: allow-all, ports-only, ipBlock with and
 // without except, explicit and inferred policyTypes, and proper exclusion of non-actionable pods.
 func TestBuildNetworkPoliciesInfoEdgeCases(t *testing.T) {
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

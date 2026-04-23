@@ -16,7 +16,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
 	v1core "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,7 +34,7 @@ func newUneventfulNfTablesNPC(podInformer cache.SharedIndexInformer,
 	npc := NetworkPolicyControllerNftables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
 	npc.syncPeriod = time.Hour
 
-	npc.filterTableRules = make(map[v1.IPFamily]*bytes.Buffer)
+	npc.filterTableRules = make(map[v1core.IPFamily]*bytes.Buffer)
 	npc.knftInterfaces = make(map[v1core.IPFamily]knftables.Interface, 2)
 	var err error
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -55,11 +54,11 @@ func newUneventfulNfTablesNPC(podInformer cache.SharedIndexInformer,
 	}
 
 	var buf bytes.Buffer
-	npc.filterTableRules[v1.IPv4Protocol] = &buf
+	npc.filterTableRules[v1core.IPv4Protocol] = &buf
 
 	krNode := utils.KRNode{
 		NodeName:      "node",
-		NodeIPv4Addrs: map[v1.NodeAddressType][]net.IP{v1.NodeInternalIP: {net.IPv4(10, 10, 10, 10)}},
+		NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.IPv4(10, 10, 10, 10)}},
 	}
 	npc.krNode = &krNode
 	ipRanges, err := svcip.NewValidator(svcip.Config{
@@ -80,7 +79,7 @@ func newUneventfulNfTablesNPC(podInformer cache.SharedIndexInformer,
 }
 
 func TestBasicChains(t *testing.T) {
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
+	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -92,7 +91,7 @@ func TestBasicChains(t *testing.T) {
 	krNetPol.ensureTopLevelChains()
 	krNetPol.ensureDefaultNetworkPolicyChain()
 	krNetPol.ensureCommonPolicyChain()
-	fakeIPv4Itf, ok := krNetPol.knftInterfaces[v1.IPv4Protocol].(*knftables.Fake)
+	fakeIPv4Itf, ok := krNetPol.knftInterfaces[v1core.IPv4Protocol].(*knftables.Fake)
 	if !ok {
 		t.Fatalf("Expected knftInterfaces[v1.IPv4Protocol] to be of type *knftables.Fake")
 	} else {
@@ -272,7 +271,7 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
+	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -371,7 +370,7 @@ func TestFullPolicySync(t *testing.T) {
 	ipv4KNftInterface := knftables.NewFake(knftables.IPv4Family, ipv4Table)
 	ipv6KNftInterface := knftables.NewFake(knftables.IPv6Family, ipv6Table)
 
-	//Don't forget to create the table before adding chains to it (idempotent).
+	// Don't forget to create the table before adding chains to it (idempotent).
 	tx := ipv4KNftInterface.NewTransaction()
 	tx.Add(&knftables.Table{
 		Comment: knftables.PtrTo("rules for " + ipv4Table),
@@ -763,7 +762,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
+	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -783,9 +782,9 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 		{"Baa", map[string]string{"app": "a", "component": "a"}, "2.2.2.2"},
 		{"Bab", map[string]string{"app": "a", "component": "b"}, "2.3.2.2"},
 	} {
-		tAddToInformerStore(t, podInformer, &v1.Pod{
+		tAddToInformerStore(t, podInformer, &v1core.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: p.name, Namespace: "nsB", Labels: p.labels},
-			Status:     v1.PodStatus{PodIP: p.ip, PodIPs: []v1.PodIP{{IP: p.ip}}},
+			Status:     v1core.PodStatus{PodIP: p.ip, PodIPs: []v1core.PodIP{{IP: p.ip}}},
 		})
 	}
 
@@ -815,7 +814,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 // TestNftablesChainsIdempotency verifies that calling the chain-setup helpers multiple
 // times produces an identical nftables state (no duplicated rules or chains).
 func TestNftablesChainsIdempotency(t *testing.T) {
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
+	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -911,7 +910,7 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	_ = npInformer.GetStore().Add(makePolicy("policy-keep"))
 	_ = npInformer.GetStore().Add(makePolicy("policy-delete"))
 	// Need a namespace so pod lookups don't fail.
-	_ = nsInformer.GetStore().Add(&v1.Namespace{
+	_ = nsInformer.GetStore().Add(&v1core.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
 	})
 

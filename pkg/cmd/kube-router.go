@@ -30,7 +30,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const healthControllerChannelLength = 10
+const (
+	healthControllerChannelLength = 10
+	nftablesInitTimeout           = 30 * time.Second
+)
 
 // KubeRouter holds the information needed to run server
 type KubeRouter struct {
@@ -265,7 +268,7 @@ func (kr *KubeRouter) Run() error {
 		if err != nil {
 			return fmt.Errorf("failed to create iptables handlers: %v", err)
 		}
-		nftCtx, nftCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		nftCtx, nftCancel := context.WithTimeout(context.Background(), nftablesInitTimeout)
 		knftablesInterfaces, err := netpol.NewKnftablesInterfaces(nftCtx, kr.Config)
 		nftCancel()
 		if err != nil {
